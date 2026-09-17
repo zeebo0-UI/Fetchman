@@ -1,0 +1,75 @@
+name: Build release artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2025
+            target: x86_64-pc-windows-msvc
+            executable: fetchman.exe
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            executable: fetchman
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            executable: fetchman
+          - os: macos-15
+            target: aarch64-apple-darwin
+            executable: fetchman
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install pinned toolchain
+        run: rustup show
+      - name: Test before packaging
+        run: cargo test --all-targets --locked
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Smoke test
+        run: ./target/${{ matrix.target }}/release/${{ matrix.executable }} --version
+      - name: Package and checksum
+        shell: python
+        env:
+          FETCHMAN_TARGET: ${{ matrix.target }}
+          FETCHMAN_EXECUTABLE: ${{ matrix.executable }}
+        run: |
+          import hashlib, os, pathlib, shutil, tarfile, zipfile
+          target = os.environ['FETCHMAN_TARGET']
+          exe = os.environ['FETCHMAN_EXECUTABLE']
+          root = pathlib.Path('dist')
+          root.mkdir()
+          bundle = root / ('fetchman-' + target)
+          bundle.mkdir()
+          shutil.copy2(pathlib.Path('target') / target / 'release' / exe, bundle / exe)
+          for document in ['README.md', 'LICENSE']:
+              shutil.copy2(document, bundle / document)
+          shutil.copytree('docs', bundle / 'docs')
+          if exe.endswith('.exe'):
+              archive = root / (bundle.name + '.zip')
+              with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as out:
+                  for item in bundle.rglob('*'):
+                      out.write(item, item.relative_to(root))
+          else:
+              archive = root / (bundle.name + '.tar.gz')
+              with tarfile.open(archive, 'w:gz') as out:
+                  out.add(bundle, arcname=bundle.name)
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          (root / (archive.name + '.sha256')).write_text(digest + '  ' + archive.name + '\n')
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fetchman-${{ matrix.target }}
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
