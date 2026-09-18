@@ -1,6 +1,6 @@
 [package]
 name = "fetchman"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2024"
 rust-version = "1.90"
 description = "Reliable downloads, without the configuration homework"
