@@ -211,8 +211,8 @@ impl Http {
     }
 
     /// Fetch an HTML landing page and select a likely downloadable asset. This
-    /// deliberately uses scoring and a minimum confidence threshold: a normal
-    /// article link should continue downloading as a page when no asset is clear.
+    /// deliberately uses scoring and a minimum confidence threshold so normal
+    /// article links are not mistaken for installers.
     pub async fn resolve_download_url(
         &self,
         page: &Url,
@@ -230,6 +230,13 @@ impl Http {
             .to_ascii_lowercase();
         if !content_type.contains("text/html") {
             return Ok(None);
+        }
+        // Roblox renders its installer URL in JavaScript, so it is absent from
+        // the HTML that a normal HTTP client receives. The stable launcher URL
+        // is the same one the official download page uses on Windows.
+        #[cfg(windows)]
+        if matches!(page.host_str(), Some("roblox.com" | "www.roblox.com")) {
+            return Ok(Url::parse("https://setup.rbxcdn.com/RobloxPlayerLauncher.exe").ok());
         }
         let body = tokio::time::timeout(Duration::from_secs(10), response.bytes())
             .await

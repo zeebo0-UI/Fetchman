@@ -645,7 +645,9 @@ async fn discover_with_page_resolution(
         }
         let page = naming::url(&discovery.identity.effective_url)?;
         let Some(asset) = http.resolve_download_url(&page, cancel).await? else {
-            return Ok(discovery);
+            return Err(FetchError::InvalidInput(
+                "This link is a web page, not a direct downloadable application. Fetchman could not find a release link on it. Open the site's Download page or paste the direct installer link.".into(),
+            ));
         };
         if !options.quiet {
             eprintln!(
