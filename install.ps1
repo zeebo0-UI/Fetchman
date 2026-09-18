@@ -12,7 +12,12 @@ New-Item -ItemType Directory -Path $temp | Out-Null
 try {
   $zip = Join-Path $temp $asset.name
   Invoke-WebRequest $asset.browser_download_url -UseBasicParsing -OutFile $zip
-  if ($checksum) { $sum = (Invoke-WebRequest $checksum.browser_download_url -UseBasicParsing).Content.Trim().Split()[0].ToLower(); if ((Get-FileHash $zip -Algorithm SHA256).Hash.ToLower() -ne $sum) { throw 'Checksum verification failed.' } }
+  if ($checksum) {
+    $checksumResponse = Invoke-WebRequest $checksum.browser_download_url -UseBasicParsing
+    $checksumText = if ($checksumResponse.Content -is [byte[]]) { [Text.Encoding]::ASCII.GetString($checksumResponse.Content) } else { [string]$checksumResponse.Content }
+    $sum = $checksumText.Trim().Split()[0].ToLower()
+    if ((Get-FileHash $zip -Algorithm SHA256).Hash.ToLower() -ne $sum) { throw 'Checksum verification failed.' }
+  }
   $install = Join-Path $env:LOCALAPPDATA 'Fetchman\bin'
   New-Item -ItemType Directory -Force -Path $install | Out-Null
   Expand-Archive $zip -DestinationPath $temp\unpacked -Force
