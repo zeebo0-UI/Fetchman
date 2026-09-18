@@ -157,13 +157,32 @@ pub async fn prepare_resume(
         http::same_remote(&identity, &discovered.identity)?;
         identity = discovered.identity;
     }
+    let segmented = identity.ranges
+        && identity.etag.is_some()
+        && identity.size.is_some_and(|n| n >= SEGMENT_THRESHOLD);
+    if !segmented && store.journal.durable_bytes() > 0 {
+        return Err(FetchError::UnsafeResume);
+    }
+    let response = if segmented {
+        None
+    } else {
+        Some(
+            http.get(
+                &identity.effective_url,
+                None,
+                identity.etag.as_deref(),
+                &cancel,
+            )
+            .await?,
+        )
+    };
     Ok(Prepared::Download(Box::new(Download {
         state_path: store.journal.path.clone(),
         output,
         original_url,
         store,
-        response: None,
-        segmented: true,
+        response,
+        segmented,
         identity,
         settings,
         http,
