@@ -661,7 +661,14 @@ mod tests {
             <a href="https://download.blender.org/release/Blender4.5/blender-4.5.0-linux-x64.tar.xz">Download Blender for Linux</a>
         "#;
         let selected = best_download_link(&page, html).unwrap();
-        assert!(selected.path().ends_with(".msi"));
+        let expected_extension = if cfg!(target_os = "windows") {
+            ".msi"
+        } else if cfg!(target_os = "macos") {
+            ".dmg"
+        } else {
+            ".tar.xz"
+        };
+        assert!(selected.path().ends_with(expected_extension));
         assert_eq!(selected.host_str(), Some("download.blender.org"));
 
         let wrapper = r#"<meta http-equiv="refresh" content="1;url=https://mirror.blender.org/release/Blender5/blender.msi">"#;
