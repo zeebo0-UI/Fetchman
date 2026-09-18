@@ -649,9 +649,27 @@ async fn discover_with_page_resolution(
         };
         if !options.quiet {
             eprintln!(
-                "Found a likely download link: {}",
+                "Found a likely release download: {}",
                 http::redacted(asset.as_str())
             );
+        }
+        if options.interactive() {
+            eprint!("Download this release instead of the web page? [Y/n] ");
+            use std::io::{self, Write};
+            io::stderr()
+                .flush()
+                .map_err(|e| FetchError::io("Could not write prompt", e))?;
+            let input = tokio::task::spawn_blocking(|| {
+                let mut line = String::new();
+                io::stdin().read_line(&mut line).map(|_| line)
+            });
+            let line = tokio::select! {
+                _ = cancel.cancelled() => return Err(FetchError::Cancelled),
+                result = input => result.map_err(|_| FetchError::Internal("Input reader stopped.".into()))?.map_err(|e| FetchError::io("Could not read input", e))?,
+            };
+            if matches!(line.trim().to_ascii_lowercase().as_str(), "n" | "no") {
+                return Ok(discovery);
+            }
         }
         discovery = discover_retry(http, asset.as_str(), settings, cancel, options).await?;
     }

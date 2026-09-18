@@ -21,7 +21,7 @@ Fetchman shows the destination, file size when available, download progress,
 current and average speed, estimated time remaining, and connection count.
 
 You can give it a download page instead of hunting for the file yourself. When a
-page is clearly a download landing page, Fetchman looks at its links and follows
+page is clearly a download landing page, Fetchman looks at its links and offers
 the most likely installer or archive link. For example:
 
 ```console
@@ -30,10 +30,10 @@ fetchman https://www.blender.org/download/
 
 This selects a Blender installer/archive link such as the Windows `.msi`, macOS
 `.dmg`, or Linux `.tar.xz` link. Fetchman uses visible download text, release or
-download paths, and known package extensions to make this choice. If a page does
-not contain a clear asset link, it downloads the page itself so it never guesses
-silently. Dynamic pages that create links only in JavaScript may still require
-the direct link; copy that link into Fetchman when this happens.
+download paths, and known package extensions to make this choice, then asks for
+confirmation before switching from the page to the release. Answer `n` to save
+the page itself. Dynamic pages that create links only in JavaScript may still
+require the direct link; copy that link into Fetchman when this happens.
 
 To save somewhere else:
 
