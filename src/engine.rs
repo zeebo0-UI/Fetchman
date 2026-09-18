@@ -635,6 +635,7 @@ async fn discover_with_page_resolution(
     options: &Options,
 ) -> Result<http::Discovery> {
     let mut discovery = discover_retry(http, source_url, settings, cancel, options).await?;
+    let mut confirmed_release = false;
     for _ in 0..3 {
         let is_html = discovery
             .content_type
@@ -655,7 +656,7 @@ async fn discover_with_page_resolution(
                 http::redacted(asset.as_str())
             );
         }
-        if options.interactive() {
+        if options.interactive() && !confirmed_release {
             eprint!("Download this release instead of the web page? [Y/n] ");
             use std::io::{self, Write};
             io::stderr()
@@ -672,6 +673,7 @@ async fn discover_with_page_resolution(
             if matches!(line.trim().to_ascii_lowercase().as_str(), "n" | "no") {
                 return Ok(discovery);
             }
+            confirmed_release = true;
         }
         discovery = discover_retry(http, asset.as_str(), settings, cancel, options).await?;
     }

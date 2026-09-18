@@ -143,7 +143,7 @@ pub fn filename(disposition: Option<&str>, effective: &Url) -> String {
     }
     effective
         .path_segments()
-        .and_then(|mut p| p.next_back())
+        .and_then(|p| p.rev().find(|segment| !segment.is_empty()))
         .and_then(|s| percent_decode_str(s).decode_utf8().ok())
         .and_then(|s| sanitize(&s))
         .unwrap_or_else(|| "download".into())
