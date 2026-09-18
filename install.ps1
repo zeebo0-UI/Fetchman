@@ -1,8 +1,11 @@
 $ErrorActionPreference = 'Stop'
 $repo = 'zeebo0-UI/Fetchman'
 $release = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest" -Headers @{ 'User-Agent' = 'Fetchman-installer' }
-$asset = $release.assets | Where-Object { $_.name -match 'windows.*\.zip$' } | Select-Object -First 1
-if (-not $asset) { throw 'No Windows x64 Fetchman release is available.' }
+$asset = $release.assets | Where-Object {
+  $name = [string]$_.name
+  $name.ToLowerInvariant().Contains('windows') -and $name.ToLowerInvariant().EndsWith('.zip')
+} | Select-Object -First 1
+if (-not $asset) { throw "No Windows Fetchman release asset was found in $($release.tag_name)." }
 $checksum = $release.assets | Where-Object { $_.name -eq ($asset.name + '.sha256') } | Select-Object -First 1
 $temp = Join-Path ([IO.Path]::GetTempPath()) ('fetchman-' + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $temp | Out-Null
