@@ -658,6 +658,7 @@ mod tests {
         let html = r#"
             <a href="/features/">Features</a>
             <a href="https://download.blender.org/release/Blender4.5/blender-4.5.0-windows-x64.msi">Download Blender for Windows</a>
+            <a href="https://download.blender.org/release/Blender4.5/blender-4.5.0-macos-arm64.dmg">Download Blender for macOS</a>
             <a href="https://download.blender.org/release/Blender4.5/blender-4.5.0-linux-x64.tar.xz">Download Blender for Linux</a>
         "#;
         let selected = best_download_link(&page, html).unwrap();
