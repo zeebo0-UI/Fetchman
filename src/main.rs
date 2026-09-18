@@ -5,6 +5,7 @@ use fetchman::{
     error::{FetchError, Result},
     naming,
     state::Journal,
+    update,
 };
 use std::{
     io::{self, Write},
@@ -63,6 +64,18 @@ async fn main() {
 
 async fn run(cli: Cli, cancel: CancellationToken) -> Result<()> {
     let interactive = cli.options.interactive();
+    if let Some(command) = cli.command.as_ref() {
+        match command {
+            Command::Update { check } => return update::run(*check).await,
+            Command::ApplyUpdate {
+                source,
+                destination,
+            } => {
+                return update::apply_update(source, destination);
+            }
+            Command::Resume { .. } => {}
+        }
+    }
     if let Some(Command::Resume { state_file }) = cli.command {
         if cli.output.is_some() || cli.url.is_some() {
             return Err(FetchError::InvalidInput(

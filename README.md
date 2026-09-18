@@ -112,6 +112,30 @@ for help/version output.
 
 ## Install Fetchman
 
+For an automatic user-local installation, run the matching command below. It verifies the release checksum and adds Fetchman to your user `PATH`; administrator access is not required.
+
+Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/zeebo0-UI/Fetchman/main/install.ps1 | iex
+```
+
+Linux or macOS:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/zeebo0-UI/Fetchman/main/install.sh | sh
+```
+
+Open a new terminal after installation. Future upgrades are one command:
+
+```console
+fetchman update
+fetchman update --check
+```
+
+The updater checks the official GitHub release, verifies its SHA-256 checksum,
+and replaces the executable safely. Existing download state is left untouched.
+
 The easiest way to install a published release is to download the archive for
 your operating system from the repository's **Releases** page:
 

@@ -29,6 +29,17 @@ pub enum Command {
         #[arg(value_name = "STATE_FILE")]
         state_file: Option<PathBuf>,
     },
+    /// Check for and install the newest Fetchman release
+    Update {
+        /// Only check; do not download or install an update
+        #[arg(long)]
+        check: bool,
+    },
+    #[command(hide = true, name = "apply-update")]
+    ApplyUpdate {
+        source: PathBuf,
+        destination: PathBuf,
+    },
 }
 
 #[derive(Debug, Clone, Default, Args)]
