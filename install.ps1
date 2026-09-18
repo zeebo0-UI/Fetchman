@@ -13,9 +13,9 @@ try {
   $zip = Join-Path $temp $asset.name
   Invoke-WebRequest $asset.browser_download_url -UseBasicParsing -OutFile $zip
   if ($checksum) {
-    $checksumResponse = Invoke-WebRequest $checksum.browser_download_url -UseBasicParsing
-    $checksumText = if ($checksumResponse.Content -is [byte[]]) { [Text.Encoding]::ASCII.GetString($checksumResponse.Content) } else { [string]$checksumResponse.Content }
-    $sum = $checksumText.Trim().Split()[0].ToLower()
+    $checksumFile = Join-Path $temp 'checksum.txt'
+    Invoke-WebRequest $checksum.browser_download_url -UseBasicParsing -OutFile $checksumFile
+    $sum = (Get-Content $checksumFile -Raw -Encoding ASCII).Trim().Split()[0].ToLower()
     if ((Get-FileHash $zip -Algorithm SHA256).Hash.ToLower() -ne $sum) { throw 'Checksum verification failed.' }
   }
   $install = Join-Path $env:LOCALAPPDATA 'Fetchman\bin'
