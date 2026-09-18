@@ -11,8 +11,8 @@ $temp = Join-Path ([IO.Path]::GetTempPath()) ('fetchman-' + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $temp | Out-Null
 try {
   $zip = Join-Path $temp $asset.name
-  Invoke-WebRequest $asset.browser_download_url -OutFile $zip
-  if ($checksum) { $sum = (Invoke-WebRequest $checksum.browser_download_url).Content.Trim().Split()[0].ToLower(); if ((Get-FileHash $zip -Algorithm SHA256).Hash.ToLower() -ne $sum) { throw 'Checksum verification failed.' } }
+  Invoke-WebRequest $asset.browser_download_url -UseBasicParsing -OutFile $zip
+  if ($checksum) { $sum = (Invoke-WebRequest $checksum.browser_download_url -UseBasicParsing).Content.Trim().Split()[0].ToLower(); if ((Get-FileHash $zip -Algorithm SHA256).Hash.ToLower() -ne $sum) { throw 'Checksum verification failed.' } }
   $install = Join-Path $env:LOCALAPPDATA 'Fetchman\bin'
   New-Item -ItemType Directory -Force -Path $install | Out-Null
   Expand-Archive $zip -DestinationPath $temp\unpacked -Force
