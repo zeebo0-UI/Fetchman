@@ -18,6 +18,14 @@ the actual single stream. A valid range response, known size of at least 16 MiB,
 and strong ETag enable 8 MiB range chunks. Separate requests carry `If-Match`;
 their status, effective URL, identity, offsets, lengths, and total size are checked.
 
+If the discovered representation is HTML, Fetchman makes a bounded follow-up
+request and scores ordinary anchor links for download language, release/download
+paths, and installer/archive extensions. A candidate must reach a confidence
+threshold before it is followed. This handles common landing pages such as
+Blender's download page while leaving ordinary pages alone. It does not execute
+JavaScript or attempt to infer links from arbitrary page text; a direct asset URL
+is the fallback for dynamic sites.
+
 The adaptive controller starts at two, measures six-second median throughput,
 settles for two seconds after changing concurrency, and requires a 10% gain to
 retain an extra worker. Rejected increases trigger a 30-second cooldown. Storage
@@ -63,4 +71,3 @@ If both partial and final files exist, neither is deleted.
 There is no plugin API, stable SDK, transport registry, configuration file, or
 generic torrent task model. Protocol and storage boundaries are internal seams
 for testing and future work, not a promise of compatibility.
-

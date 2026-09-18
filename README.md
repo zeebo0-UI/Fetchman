@@ -20,6 +20,21 @@ fetchman https://example.com/file.zip
 Fetchman shows the destination, file size when available, download progress,
 current and average speed, estimated time remaining, and connection count.
 
+You can give it a download page instead of hunting for the file yourself. When a
+page is clearly a download landing page, Fetchman looks at its links and follows
+the most likely installer or archive link. For example:
+
+```console
+fetchman https://www.blender.org/download/
+```
+
+This selects a Blender installer/archive link such as the Windows `.msi`, macOS
+`.dmg`, or Linux `.tar.xz` link. Fetchman uses visible download text, release or
+download paths, and known package extensions to make this choice. If a page does
+not contain a clear asset link, it downloads the page itself so it never guesses
+silently. Dynamic pages that create links only in JavaScript may still require
+the direct link; copy that link into Fetchman when this happens.
+
 To save somewhere else:
 
 ```console
@@ -95,7 +110,49 @@ Exit codes: `0` success, `1` transfer/storage/recovery error, `2` invalid usage,
 `130` interrupted by the user. Download status goes to stderr; stdout is reserved
 for help/version output.
 
-## Build from source
+## Install Fetchman
+
+The easiest way to install a published release is to download the archive for
+your operating system from the repository's **Releases** page:
+
+1. Download the archive matching your system.
+2. Verify its SHA-256 file if you need a checksum-verified install.
+3. Extract the `fetchman` executable.
+4. Put it in a directory on your `PATH`.
+
+On Windows, for example, extract `fetchman.exe` to a folder such as
+`C:\\Tools\\Fetchman`, add that folder to your User `Path`, open a new PowerShell
+window, and check it with:
+
+```powershell
+fetchman --version
+fetchman https://www.blender.org/download/
+```
+
+On macOS or Linux, extract `fetchman`, make it executable, and place it in a
+personal bin directory:
+
+```console
+mkdir -p ~/.local/bin
+tar -xzf fetchman-<target>.tar.gz
+install -m 755 fetchman-<target>/fetchman ~/.local/bin/fetchman
+fetchman --version
+```
+
+If `~/.local/bin` is not already on your `PATH`, add this to your shell profile:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Release archives currently contain unsigned binaries. macOS may require removing
+the quarantine attribute after you have verified the archive yourself:
+
+```console
+xattr -d com.apple.quarantine ~/.local/bin/fetchman
+```
+
+### Build from source
 
 Install [Rust](https://rust-lang.org/tools/install/) and your platform's native
 build prerequisites. The repository pins Rust 1.90.0.
@@ -142,4 +199,3 @@ cargo test --all-targets --locked
 
 Integration tests use a local fault-injection HTTP server, not public downloads.
 They verify results against independent SHA-256 hashes.
-

@@ -54,7 +54,8 @@ pub async fn prepare_new(
         naming::collision(&naming::destination(output)?)?;
     }
     let http = Http::new(&settings)?;
-    let mut discovery = discover_retry(&http, &url, &settings, &cancel, options).await?;
+    let mut discovery =
+        discover_with_page_resolution(&http, &url, &settings, &cancel, options).await?;
     let segmented = discovery.identity.ranges
         && discovery.identity.etag.is_some()
         && discovery
@@ -150,7 +151,9 @@ pub async fn prepare_resume(
     let output = store.journal.header.output.clone();
     let mut identity = store.journal.header.identity.clone();
     if store.journal.complete.is_none() {
-        let discovered = discover_retry(&http, &original_url, &settings, &cancel, options).await?;
+        let discovered =
+            discover_with_page_resolution(&http, &original_url, &settings, &cancel, options)
+                .await?;
         http::same_remote(&identity, &discovered.identity)?;
         identity = discovered.identity;
     }
@@ -603,6 +606,37 @@ async fn discover_retry(
         }
     }
     unreachable!()
+}
+
+async fn discover_with_page_resolution(
+    http: &Http,
+    source_url: &str,
+    settings: &Settings,
+    cancel: &CancellationToken,
+    options: &Options,
+) -> Result<http::Discovery> {
+    let mut discovery = discover_retry(http, source_url, settings, cancel, options).await?;
+    for _ in 0..3 {
+        let is_html = discovery
+            .content_type
+            .as_deref()
+            .is_some_and(|value| value.contains("html"));
+        if !is_html {
+            return Ok(discovery);
+        }
+        let page = naming::url(&discovery.identity.effective_url)?;
+        let Some(asset) = http.resolve_download_url(&page, cancel).await? else {
+            return Ok(discovery);
+        };
+        if !options.quiet {
+            eprintln!(
+                "Found a likely download link: {}",
+                http::redacted(asset.as_str())
+            );
+        }
+        discovery = discover_retry(http, asset.as_str(), settings, cancel, options).await?;
+    }
+    Ok(discovery)
 }
 
 fn delay(error: &FetchError, attempt: u32) -> Duration {

@@ -21,6 +21,7 @@ pub struct Discovery {
     pub identity: Identity,
     pub filename: String,
     pub response: Option<Response>,
+    pub content_type: Option<String>,
 }
 
 impl Http {
@@ -152,6 +153,18 @@ impl Http {
                 "The website did not provide a downloadable file.".into(),
             ));
         };
+        let content_type = response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .map(|value| {
+                value
+                    .split(';')
+                    .next()
+                    .unwrap_or(value)
+                    .trim()
+                    .to_ascii_lowercase()
+            });
         let identity = Identity {
             effective_url: response.url().to_string(),
             size,
@@ -185,14 +198,50 @@ impl Http {
                 identity,
                 filename,
                 response: None,
+                content_type,
             })
         } else {
             Ok(Discovery {
                 identity,
                 filename,
                 response: Some(response),
+                content_type,
             })
         }
+    }
+
+    /// Fetch an HTML landing page and select a likely downloadable asset. This
+    /// deliberately uses scoring and a minimum confidence threshold: a normal
+    /// article link should continue downloading as a page when no asset is clear.
+    pub async fn resolve_download_url(
+        &self,
+        page: &Url,
+        cancel: &CancellationToken,
+    ) -> Result<Option<Url>> {
+        let response = self.get(page.as_str(), None, None, cancel).await?;
+        if response.status() != StatusCode::OK {
+            return Ok(None);
+        }
+        let content_type = response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        if !content_type.contains("text/html") {
+            return Ok(None);
+        }
+        let body = tokio::time::timeout(Duration::from_secs(10), response.bytes())
+            .await
+            .map_err(|_| FetchError::Network {
+                message: "The download page took too long to load.".into(),
+                retry_after: None,
+            })?
+            .map_err(network_error)?;
+        if body.len() > 8 * 1024 * 1024 {
+            return Ok(None);
+        }
+        Ok(best_download_link(page, &String::from_utf8_lossy(&body)))
     }
 
     pub fn validate_range(
@@ -329,6 +378,177 @@ pub fn redacted(url: &str) -> String {
         .unwrap_or_else(|_| "[invalid URL]".into())
 }
 
+fn best_download_link(page: &Url, html: &str) -> Option<Url> {
+    let meta =
+        regex::Regex::new(r#"(?is)<meta\b[^>]*\bcontent\s*=\s*["'][^"']*\burl\s*=\s*([^"';\s]+)"#)
+            .ok()?;
+    for capture in meta.captures_iter(html) {
+        let raw = capture.get(1)?.as_str().trim();
+        let Ok(mut url) = page.join(raw) else {
+            continue;
+        };
+        if !matches!(url.scheme(), "http" | "https")
+            || url.username() != ""
+            || url.password().is_some()
+        {
+            continue;
+        }
+        url.set_fragment(None);
+        let path = url.path().to_ascii_lowercase();
+        let package = [
+            ".exe",
+            ".msi",
+            ".dmg",
+            ".pkg",
+            ".deb",
+            ".rpm",
+            ".appimage",
+            ".zip",
+            ".7z",
+            ".tar",
+            ".gz",
+            ".xz",
+            ".bz2",
+            ".iso",
+            ".img",
+            ".msix",
+        ]
+        .iter()
+        .any(|suffix| path.trim_end_matches('/').ends_with(suffix));
+        let address = url.as_str().to_ascii_lowercase();
+        if package
+            || address.contains("download")
+            || address.contains("release")
+            || address.contains("mirror")
+        {
+            return Some(url);
+        }
+    }
+    let anchor =
+        regex::Regex::new(r#"(?is)<a\b[^>]*\bhref\s*=\s*[\"']([^\"']+)[\"'][^>]*>(.*?)</a\s*>"#)
+            .ok()?;
+    let tag = regex::Regex::new(r"(?is)<[^>]*>").ok()?;
+    let entity = |text: &str| {
+        text.replace("&amp;", "&")
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+    };
+    let mut best: Option<(i32, Url)> = None;
+    for capture in anchor.captures_iter(html) {
+        let raw_href = entity(capture.get(1)?.as_str().trim());
+        let Ok(mut url) = page.join(&raw_href) else {
+            continue;
+        };
+        if !matches!(url.scheme(), "http" | "https")
+            || url.username() != ""
+            || url.password().is_some()
+        {
+            continue;
+        }
+        url.set_fragment(None);
+        if url == *page {
+            continue;
+        }
+        let text = tag.replace_all(capture.get(2)?.as_str(), " ");
+        let text = entity(&text).to_ascii_lowercase();
+        let address = url.as_str().to_ascii_lowercase();
+        let path = url.path().to_ascii_lowercase();
+        let normalized_path = path.trim_end_matches('/');
+        let mut score = 0;
+        if text.contains("download") {
+            score += 8;
+        }
+        if text.contains("installer") || text.contains("get blender") {
+            score += 5;
+        }
+        if address.contains("download")
+            || address.contains("release")
+            || address.contains("archive")
+        {
+            score += 4;
+        }
+        if url
+            .query()
+            .is_some_and(|query| query.to_ascii_lowercase().contains("download"))
+        {
+            score += 3;
+        }
+        if [
+            ".exe",
+            ".msi",
+            ".dmg",
+            ".pkg",
+            ".deb",
+            ".rpm",
+            ".appimage",
+            ".zip",
+            ".7z",
+            ".tar",
+            ".gz",
+            ".xz",
+            ".bz2",
+            ".iso",
+            ".img",
+            ".msix",
+        ]
+        .iter()
+        .any(|suffix| normalized_path.ends_with(suffix))
+        {
+            score += 12;
+        }
+        if normalized_path.ends_with(".html") || path.ends_with("/") {
+            score -= 4;
+        }
+        if address.contains("/source/") || text.contains("source code") {
+            score -= 5;
+        }
+        if cfg!(target_os = "windows") {
+            if address.contains("windows") || address.contains("win64") || text.contains("windows")
+            {
+                score += 6;
+            }
+            if address.contains("linux")
+                || address.contains("macos")
+                || text.contains("linux")
+                || text.contains("macos")
+            {
+                score -= 2;
+            }
+        } else if cfg!(target_os = "macos") {
+            if address.contains("macos") || address.contains("darwin") || text.contains("macos") {
+                score += 6;
+            }
+            if address.contains("windows")
+                || address.contains("linux")
+                || text.contains("windows")
+                || text.contains("linux")
+            {
+                score -= 2;
+            }
+        } else if cfg!(target_os = "linux") {
+            if address.contains("linux") || text.contains("linux") {
+                score += 6;
+            }
+            if address.contains("windows")
+                || address.contains("macos")
+                || text.contains("windows")
+                || text.contains("macos")
+            {
+                score -= 2;
+            }
+        }
+        if score < 10 {
+            continue;
+        }
+        if best.as_ref().is_none_or(|(old, _)| score > *old) {
+            best = Some((score, url));
+        }
+    }
+    best.map(|(_, url)| url)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -430,5 +650,23 @@ mod tests {
             }
             task.await.unwrap();
         }
+    }
+
+    #[test]
+    fn selects_assets_from_landing_pages() {
+        let page = Url::parse("https://www.blender.org/download/").unwrap();
+        let html = r#"
+            <a href="/features/">Features</a>
+            <a href="https://download.blender.org/release/Blender4.5/blender-4.5.0-windows-x64.msi">Download Blender for Windows</a>
+            <a href="https://download.blender.org/release/Blender4.5/blender-4.5.0-linux-x64.tar.xz">Download Blender for Linux</a>
+        "#;
+        let selected = best_download_link(&page, html).unwrap();
+        assert!(selected.path().ends_with(".msi"));
+        assert_eq!(selected.host_str(), Some("download.blender.org"));
+
+        let wrapper = r#"<meta http-equiv="refresh" content="1;url=https://mirror.blender.org/release/Blender5/blender.msi">"#;
+        let selected = best_download_link(&page, wrapper).unwrap();
+        assert_eq!(selected.host_str(), Some("mirror.blender.org"));
+        assert!(selected.path().ends_with(".msi"));
     }
 }
