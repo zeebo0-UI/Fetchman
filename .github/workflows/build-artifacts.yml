@@ -34,7 +34,7 @@ jobs:
       - name: Install target
         run: rustup target add ${{ matrix.target }}
       - name: Test before packaging
-        run: cargo test --all-targets --locked -- --test-threads=1
+        run: cargo test --all-targets --locked
       - name: Build
         run: cargo build --release --locked --target ${{ matrix.target }}
       - name: Smoke test
